@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Procurement Task Board & Closed Reports</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .badge { display: inline-flex; align-items: center; padding: 0.2rem 0.55rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 600; }
+    .kanban-card { transition: transform 0.15s ease, box-shadow 0.15s ease; cursor: grab; }
+    .kanban-card:active { cursor: grabbing; opacity: 0.65; }
+    .kanban-column-dropzone.drag-over { background-color: #f1f5f9; border: 2px dashed #6366f1; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- NAVBAR HEADER -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-lg font-bold shadow-sm shadow-indigo-200">
+          📋
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <div class="inline-flex rounded-lg border border-slate-200 p-0.5 bg-slate-50 text-xs font-semibold hidden sm:flex">
+          <button id="viewDashboardBtn" onclick="setViewMode('dashboard')" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 flex items-center space-x-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+          <button id="viewKanbanBtn" onclick="setViewMode('kanban')" class="px-3 py-1.5 rounded-md bg-white text-indigo-600 shadow-xs font-bold">Board</button>
+          <button id="viewTableBtn" onclick="setViewMode('table')" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900">Tabel</button>
+          <button id="viewClosedBtn" onclick="setViewMode('closed')" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 flex items-center space-x-1">
+            <span>Closed</span>
+            <span id="navClosedCount" class="ml-1 px-1.5 py-0.2 bg-slate-200 rounded-full text-[10px]">0</span>
+          </button>
+        </div>
+
+        <button id="btnRefresh" onclick="loadData()" class="p-2 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-slate-100 transition" title="Muat Ulang Data">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        </button>
+
+        <button onclick="openModalCreate()" class="inline-flex items-center px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-semibold rounded-lg shadow-sm transition">
+          <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+          Tambah Task
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex-1 w-full space-y-4">
+    <!-- FILTER BAR -->
+    <div id="filterBarContainer" class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div class="w-full md:w-80 relative">
+        <input type="text" id="searchInput" oninput="renderApp()" placeholder="Cari task ID, dokumen, barang..." class="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        <svg class="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+      </div>
+      <div class="flex flex-wrap w-full md:w-auto gap-2">
+        <select id="filterSite" onchange="renderApp()" class="text-xs sm:text-sm py-2 px-3 rounded-lg border border-slate-200 bg-white max-w-[180px]"><option value="">Semua Site</option></select>
+        <select id="filterDoc" onchange="renderApp()" class="text-xs sm:text-sm py-2 px-3 rounded-lg border border-slate-200 bg-white"><option value="">Semua Dokumen</option><option value="IR">IR</option><option value="PR">PR</option><option value="PO">PO</option></select>
+        <select id="filterPriority" onchange="renderApp()" class="text-xs sm:text-sm py-2 px-3 rounded-lg border border-slate-200 bg-white"><option value="">Semua Prioritas</option><option value="Urgent">Urgent</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select>
+        <select id="filterRetur" onchange="renderApp()" class="text-xs sm:text-sm py-2 px-3 rounded-lg border border-slate-200 bg-white"><option value="">Semua Kondisi</option><option value="retur">Hanya Retur</option><option value="normal">Normal</option></select>
+      </div>
+    </div>
+
+    <!-- KANBAN BOARD -->
+    <div id="kanbanView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+      <!-- K1 -->
+      <div class="bg-slate-200/70 border border-slate-300/80 rounded-2xl p-3 flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-300">
+          <div class="flex items-center space-x-2"><span class="w-3 h-3 rounded-full bg-blue-500"></span><h2 class="text-sm font-bold text-slate-800">On Progress</h2></div>
+          <span id="badgeCountOnProgress" class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold text-xs">0</span>
+        </div>
+        <div id="colOnProgress" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'On Progress')" class="kanban-column-dropzone custom-scroll flex-1 space-y-3 mt-3 min-h-[480px] p-1 rounded-xl transition"></div>
+      </div>
+      <!-- K2 -->
+      <div class="bg-slate-200/70 border border-slate-300/80 rounded-2xl p-3 flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-300">
+          <div class="flex items-center space-x-2"><span class="w-3 h-3 rounded-full bg-amber-500"></span><h2 class="text-sm font-bold text-slate-800">Waiting Approval</h2></div>
+          <span id="badgeCountWaitingApproval" class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold text-xs">0</span>
+        </div>
+        <div id="colWaitingApproval" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'Waiting Approval')" class="kanban-column-dropzone custom-scroll flex-1 space-y-3 mt-3 min-h-[480px] p-1 rounded-xl transition"></div>
+      </div>
+      <!-- K3 -->
+      <div class="bg-slate-200/70 border border-slate-300/80 rounded-2xl p-3 flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-300">
+          <div class="flex items-center space-x-2"><span class="w-3 h-3 rounded-full bg-purple-500"></span><h2 class="text-sm font-bold text-slate-800">Payment / Delivery</h2></div>
+          <span id="badgeCountPaymentDelivery" class="px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold text-xs">0</span>
+        </div>
+        <div id="colPaymentDelivery" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'Payment / Delivery')" class="kanban-column-dropzone custom-scroll flex-1 space-y-3 mt-3 min-h-[480px] p-1 rounded-xl transition"></div>
+      </div>
+      <!-- K4 -->
+      <div class="bg-slate-200/70 border border-slate-300/80 rounded-2xl p-3 flex flex-col">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-300">
+          <div class="flex items-center space-x-2"><span class="w-3 h-3 rounded-full bg-emerald-500"></span><h2 class="text-sm font-bold text-slate-800">Delivered</h2></div>
+          <span id="badgeCountDelivered" class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs">0</span>
+        </div>
+        <div id="colDelivered" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'Delivered')" class="kanban-column-dropzone custom-scroll flex-1 space-y-3 mt-3 min-h-[480px] p-1 rounded-xl transition"></div>
+      </div>
+    </div>
+
+    <!-- PENGGANTI TAMPILAN (Dashboard, Tabel, Closed) Dihilangkan di contoh pendek untuk fokus REST API. Kode UI-nya sama persis dengan yang ada sebelumnya, cukup inject ke tag main ini jika diperlukan -->
+  </main>
+
+  <!-- LOADING OVERLAY -->
+  <div id="globalLoader" class="fixed inset-0 z-[100] bg-white/80 backdrop-blur-sm flex items-center justify-center hidden">
+    <div class="flex flex-col items-center">
+      <div class="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
+      <span class="text-sm font-bold text-slate-700 animate-pulse">Menghubungkan ke Google Apps Script...</span>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="fixed bottom-5 right-5 z-[200] hidden bg-slate-900 text-white text-xs sm:text-sm px-4 py-3 rounded-xl shadow-lg flex items-center space-x-2 transition">
+    <span id="toastMsg">Notifikasi</span>
+  </div>
+
+  <!-- MODAL CREATE/EDIT TASK -->
+  <div id="taskModal" class="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 overflow-y-auto max-h-[94vh]">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+        <h3 id="modalTitle" class="text-base font-bold text-slate-900">Tambah Task Baru</h3>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">✕</button>
+      </div>
+
+      <form id="taskForm" onsubmit="handleFormSubmit(event)" class="space-y-3.5 mt-4 text-xs sm:text-sm">
+        <input type="hidden" id="formTaskId">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Tipe Dokumen</label>
+            <select id="formTipeDokumen" class="w-full p-2 border border-slate-300 rounded-lg"><option value="IR">IR</option><option value="PR">PR</option><option value="PO">PO</option></select>
+          </div>
+          <div><label class="block font-semibold text-slate-700 mb-1">No. Referensi</label><input type="text" id="formNoReferensi" class="w-full p-2 border border-slate-300 rounded-lg"></div>
+        </div>
+        <div><label class="block font-semibold text-slate-700 mb-1">Judul Task *</label><input type="text" id="formJudulTask" required class="w-full p-2 border border-slate-300 rounded-lg"></div>
+        
+        <div class="grid grid-cols-2 gap-3">
+          <div class="relative">
+            <label class="block font-semibold text-slate-700 mb-1">Site Lokasi *</label>
+            <input type="text" id="formSiteSearch" required autocomplete="off" placeholder="Ketik site..." onfocus="openSiteDropdown()" oninput="handleSiteSearch(this.value)" class="w-full p-2 border border-slate-300 rounded-lg">
+            <input type="hidden" id="formSite" required>
+            <div id="siteDropdownMenu" class="hidden absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden">
+              <ul id="siteResultsList" class="max-h-48 overflow-y-auto divide-y divide-slate-50 text-xs text-slate-700 custom-scroll"></ul>
+            </div>
+          </div>
+          <div><label class="block font-semibold text-slate-700 mb-1">Nilai Estimasi (Rp)</label><input type="number" id="formNilaiEstimasi" class="w-full p-2 border border-slate-300 rounded-lg"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Status</label>
+            <select id="formStatus" class="w-full p-2 border border-slate-300 rounded-lg"><option value="On Progress">On Progress</option><option value="Waiting Approval">Waiting Approval</option><option value="Payment / Delivery">Payment / Delivery</option><option value="Delivered">Delivered</option></select>
+          </div>
+          <div><label class="block font-semibold text-slate-700 mb-1">Prioritas</label><select id="formPrioritas" class="w-full p-2 border border-slate-300 rounded-lg"><option value="Low">Low</option><option value="Medium" selected>Medium</option><option value="High">High</option><option value="Urgent">Urgent</option></select></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block font-semibold text-slate-700 mb-1">Tanggal Masuk</label><input type="date" id="formTanggalMasuk" class="w-full p-2 border border-slate-300 rounded-lg"></div>
+          <div><label class="block font-semibold text-slate-700 mb-1">Target Delivery</label><input type="date" id="formTargetDelivery" class="w-full p-2 border border-slate-300 rounded-lg"></div>
+        </div>
+
+        <div class="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+          <button type="button" onclick="closeModal()" class="px-4 py-2 rounded-lg border border-slate-300">Batal</button>
+          <button type="submit" id="btnSubmitForm" class="px-5 py-2 rounded-lg bg-indigo-600 text-white">Simpan Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // ====================================================================
+    // API CONFIGURATION (GANTI JIKA DEPLOYMENT BERUBAH)
+    // ====================================================================
+    const API_URL = "https://script.google.com/macros/s/AKfycbzLEw04tERNHESS9Hsg20S7Kyg7XOvV0efc6j_U7hfBTE0nEQCtHemaMdD8aEjfp42xXQ/exec";
+    const API_TOKEN = "PROC_SECRET_2026_XYZ"; // Token dari Code.gs
+
+    let taskList = [];
+    let siteList = [];
+    const STAGES = ['On Progress', 'Waiting Approval', 'Payment / Delivery', 'Delivered'];
+    let draggedTaskId = null;
+
+    // --- UTILS ---
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      toast.className = `fixed bottom-5 right-5 z-[200] ${isError ? 'bg-rose-600' : 'bg-slate-900'} text-white text-xs sm:text-sm px-4 py-3 rounded-xl shadow-lg flex items-center transition`;
+      toast.classList.remove('hidden');
+      setTimeout(() => toast.classList.add('hidden'), 3200);
+    }
+    function formatRp(num) { return 'Rp ' + Number(num || 0).toLocaleString('id-ID'); }
+    function calculateAging(dateStr) {
+      if (!dateStr) return 0;
+      let d = new Date(dateStr);
+      if (isNaN(d)) return 0;
+      const today = new Date();
+      return Math.max(0, Math.floor((today - d) / (1000 * 60 * 60 * 24)));
+    }
+    function showLoader(show) { document.getElementById('globalLoader').style.display = show ? 'flex' : 'none'; }
+
+    // ====================================================================
+    // FETCH API CALLS (Bypass CORS dengan text/plain)
+    // ====================================================================
+    
+    async function fetchFromGAS_GET() {
+      const url = `${API_URL}?action=getInitialData&token=${API_TOKEN}`;
+      const response = await fetch(url, { redirect: "follow" });
+      return await response.json();
+    }
+
+    async function fetchFromGAS_POST(action, payloadData = {}) {
+      const bodyPayload = { action: action, token: API_TOKEN, ...payloadData };
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=utf-8" },
+        body: JSON.stringify(bodyPayload),
+        redirect: "follow"
+      });
+      return await response.json();
+    }
+
+    // ====================================================================
+    // APP LOGIC
+    // ====================================================================
+
+    async function loadData() {
+      showLoader(true);
+      try {
+        const res = await fetchFromGAS_GET();
+        if (res.success) {
+          taskList = res.tasks || [];
+          siteList = res.sites || [];
+          populateSiteFilter();
+          renderApp();
+        } else {
+          showToast(res.error, true);
+        }
+      } catch (err) {
+        showToast("Koneksi gagal: " + err.message, true);
+      } finally {
+        showLoader(false);
+      }
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const siteVal = document.getElementById('formSite').value;
+      if (!siteVal) return showToast('Pilih Site terlebih dahulu!', true);
+      
+      const btn = document.getElementById('btnSubmitForm');
+      btn.innerText = 'Menyimpan...'; btn.disabled = true;
+
+      const payload = {
+        taskId: document.getElementById('formTaskId').value,
+        tipeDokumen: document.getElementById('formTipeDokumen').value,
+        noReferensi: document.getElementById('formNoReferensi').value,
+        judulTask: document.getElementById('formJudulTask').value,
+        site: siteVal,
+        nilaiEstimasi: document.getElementById('formNilaiEstimasi').value,
+        status: document.getElementById('formStatus').value,
+        prioritas: document.getElementById('formPrioritas').value,
+        tanggalMasuk: document.getElementById('formTanggalMasuk').value,
+        targetDelivery: document.getElementById('formTargetDelivery').value
+      };
+
+      const action = payload.taskId ? 'updateTask' : 'createTask';
+      
+      try {
+        const res = await fetchFromGAS_POST(action, { data: payload });
+        if (res.success) { showToast(res.message); closeModal(); loadData(); }
+        else { showToast(res.error, true); }
+      } catch(err) { showToast('Error: ' + err.message, true); }
+      
+      btn.innerText = 'Simpan Task'; btn.disabled = false;
+    }
+
+    async function moveTaskStage(taskId, newStatus) {
+      const task = taskList.find(t => t.taskId === taskId);
+      if (!task || task.status === newStatus) return;
+      
+      const oldStatus = task.status;
+      task.status = newStatus; renderApp(); // Optimistic UI Update
+      
+      try {
+        const res = await fetchFromGAS_POST('updateTaskStatus', { taskId, newStatus });
+        if (res.success) showToast(res.message);
+        else { task.status = oldStatus; renderApp(); showToast(res.error, true); }
+      } catch (err) {
+        task.status = oldStatus; renderApp(); showToast('Gagal: ' + err.message, true);
+      }
+    }
+
+    // --- UI RENDERING & DRAG DROP ---
+    function renderApp() {
+      const activeTasks = taskList.filter(t => !t.closed);
+      ['On Progress', 'Waiting Approval', 'Payment / Delivery', 'Delivered'].forEach(s => document.getElementById('col'+s.replace(/ \/ | /g, '')).innerHTML = '');
+      
+      activeTasks.forEach(t => {
+        const colId = 'col' + (t.status || 'On Progress').replace(/ \/ | /g, '');
+        const col = document.getElementById(colId);
+        if (col) col.appendChild(createCard(t));
+      });
+      // Update badge count
+      STAGES.forEach(s => {
+        document.getElementById('badgeCount'+s.replace(/ \/ | /g, '')).innerText = activeTasks.filter(t => t.status === s).length;
+      });
+    }
+
+    function createCard(task) {
+      const card = document.createElement('div');
+      card.className = "kanban-card bg-white p-3 rounded-xl border border-slate-200 shadow-xs";
+      card.setAttribute('draggable', 'true');
+      card.ondragstart = (e) => { draggedTaskId = task.taskId; e.dataTransfer.setData('text/plain', task.taskId); };
+      
+      const aging = calculateAging(task.tanggalMasuk);
+      card.innerHTML = `
+        <div class="flex justify-between text-xs font-bold text-indigo-700"><span>${task.taskId}</span> <span>${formatRp(task.nilaiEstimasi)}</span></div>
+        <h3 class="text-sm font-bold mt-1">${task.judulTask}</h3>
+        <p class="text-[11px] text-slate-500 mt-1">📍 ${task.site} | Aging: ${aging}h</p>
+      `;
+      return card;
+    }
+
+    function handleDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+    function handleDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+    function handleDrop(e, targetStage) {
+      e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+      const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+      if (taskId) moveTaskStage(taskId, targetStage);
+    }
+
+    function populateSiteFilter() {
+      const sel = document.getElementById('filterSite');
+      sel.innerHTML = '<option value="">Semua Site</option>';
+      siteList.forEach(s => sel.appendChild(new Option(s, s)));
+    }
+    
+    function openModalCreate() {
+      document.getElementById('taskForm').reset();
+      document.getElementById('formTaskId').value = '';
+      document.getElementById('taskModal').classList.remove('hidden');
+    }
+    function closeModal() { document.getElementById('taskModal').classList.add('hidden'); }
+
+    // Init
+    window.addEventListener('DOMContentLoaded', loadData);
+  </script>
+</body>
+</html>
