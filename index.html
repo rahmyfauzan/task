@@ -215,7 +215,11 @@
     
     async function fetchFromGAS_GET() {
       const url = `${API_URL}?action=getInitialData&token=${API_TOKEN}`;
-      const response = await fetch(url, { redirect: "follow" });
+      const response = await fetch(url, { 
+        method: "GET",
+        mode: "cors",
+        redirect: "follow" 
+      });
       return await response.json();
     }
 
@@ -237,17 +241,26 @@
     async function loadData() {
       showLoader(true);
       try {
-        const res = await fetchFromGAS_GET();
-        if (res.success) {
+        let res;
+        // Prioritaskan penarikan data via POST text/plain (jauh lebih kebal CORS)
+        try {
+          res = await fetchFromGAS_POST("getInitialData");
+        } catch (ePost) {
+          console.warn("POST getInitialData gagal, mencoba via GET fallback...", ePost);
+          res = await fetchFromGAS_GET();
+        }
+
+        if (res && res.success) {
           taskList = res.tasks || [];
           siteList = res.sites || [];
           populateSiteFilter();
           renderApp();
         } else {
-          showToast(res.error, true);
+          showToast(res ? res.error : "Gagal memuat data dari server", true);
         }
       } catch (err) {
-        showToast("Koneksi gagal: " + err.message, true);
+        console.error("Detail Error Fetch:", err);
+        showToast("Koneksi gagal: " + err.message + " (Cek Console F12)", true);
       } finally {
         showLoader(false);
       }
